@@ -1,71 +1,104 @@
+import 'package:exam/services/album_services.dart';
 import 'package:flutter/material.dart';
 import 'package:exam/models/album.dart';
-import 'package:exam/services/album_services.dart';
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class HomePageStateful extends StatefulWidget {
+  const HomePageStateful({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomePageStateful> createState() => _HomePageStatefulState();
 }
 
-class _HomePageState extends State<HomePage> {
-  List<Album> lastAlbum = [];
-  bool isLoading = true;
+class _HomePageStatefulState extends State<HomePageStateful> {
+  List<Album> album = [];
 
   void fetchAlbum() async {
+    final result = await AlbumService.fetchAlbum();
+    setState(() {
+      album = result;
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    fetchAlbum();
+  }
+
+  void deleteAlbum(int index) async {
     try {
-      final result = await AlbumService.fetchAlbum();
+      await AlbumService.deleteAlbum(album[index].id);
       setState(() {
-        lastAlbum = result;
-        isLoading = false;
+        album.removeAt(index);
       });
     } catch (e) {
-      print('Failed to fetch albums: $e');
+      // Display error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete album: $e')),
+      );
     }
   }
 
-  void deleteAlbum(int id) async {
+  void editAlbum(int index, String newTitle, String newUrl, String newThumbnailUrl) async {
+    Album updatedAlbum = Album(
+      albumId: album[index].albumId,
+      id: album[index].id,
+      title: newTitle,
+      url: newUrl,
+      thumbnailUrl: newThumbnailUrl,
+    );
+
     try {
-      await AlbumService.deleteAlbum(id);
+      await AlbumService.editAlbum(updatedAlbum);
       setState(() {
-        lastAlbum.removeWhere((album) => album.id == id);
+        album[index] = updatedAlbum;
       });
     } catch (e) {
-      print('Failed to delete album: $e');
+      // Handle error
     }
   }
 
-  void updateAlbum(Album album) async {
+  void addAlbum(int albumId, String title, String url, String thumbnailUrl) async {
+    Album newAlbum = Album(
+      albumId: albumId,
+      id: album.isNotEmpty ? album.last.id + 1 : 1,
+      title: title,
+      url: url,
+      thumbnailUrl: thumbnailUrl,
+    );
+
     try {
-      await AlbumService.updateAlbum(album);
+      await AlbumService.addAlbum(newAlbum);
       setState(() {
-        final index = lastAlbum.indexWhere((a) => a.id == album.id);
-        if (index != -1) {
-          lastAlbum[index] = album;
-        }
+        album.add(newAlbum);
       });
     } catch (e) {
-      print('Failed to update album: $e');
+      // Handle error
     }
   }
 
-  void showEditDialog(Album album) {
-    final titleController = TextEditingController(text: album.title);
-    final urlController = TextEditingController(text: album.url);
-    final thumbnailUrlController = TextEditingController(text: album.thumbnailUrl);
+  void showAddDialog(BuildContext context) {
+    TextEditingController albumIdController = TextEditingController();
+    TextEditingController titleController = TextEditingController();
+    TextEditingController urlController = TextEditingController();
+    TextEditingController thumbnailUrlController = TextEditingController();
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Edit Album'),
+          title: Text('Tambah Album'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [
+            children: <Widget>[
+              TextField(
+                controller: albumIdController,
+                decoration: InputDecoration(labelText: 'Album ID'),
+                keyboardType: TextInputType.number,
+              ),
               TextField(
                 controller: titleController,
-                decoration: InputDecoration(labelText: 'Title'),
+                decoration: InputDecoration(labelText: 'Judul'),
               ),
               TextField(
                 controller: urlController,
@@ -77,24 +110,79 @@ class _HomePageState extends State<HomePage> {
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Cancel'),
-            ),
-            TextButton(
+          actions: <Widget>[
+            ElevatedButton(
+              style: ButtonStyle(
+                backgroundColor: MaterialStateProperty.all<Color>(Colors.red), 
+                foregroundColor: MaterialStateProperty.all<Color>(Colors.white), 
+              ),
+              child: Text('Batal'),
               onPressed: () {
-                final updatedAlbum = Album(
-                  albumId: album.albumId,
-                  id: album.id,
-                  title: titleController.text,
-                  url: urlController.text,
-                  thumbnailUrl: thumbnailUrlController.text,
-                );
-                updateAlbum(updatedAlbum);
-                Navigator.pop(context);
+                Navigator.of(context).pop();
               },
-              child: Text('Save'),
+            ),
+            ElevatedButton(
+              style: ButtonStyle(
+                backgroundColor: MaterialStateProperty.all<Color>(Colors.green), 
+                foregroundColor: MaterialStateProperty.all<Color>(Colors.white), 
+              ),
+              child: Text('Tambah'),
+              onPressed: () {
+                addAlbum(
+                  int.parse(albumIdController.text),
+                  titleController.text,
+                  urlController.text,
+                  thumbnailUrlController.text,
+                );
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void showEditDialog(BuildContext context, int index) {
+    TextEditingController titleController = TextEditingController(text: album[index].title);
+    TextEditingController urlController = TextEditingController(text: album[index].url);
+    TextEditingController thumbnailUrlController = TextEditingController(text: album[index].thumbnailUrl);
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Edit Album'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Judul'),
+              ),
+              TextField(
+                controller: urlController,
+                decoration: InputDecoration(labelText: 'URL'),
+              ),
+              TextField(
+                controller: thumbnailUrlController,
+                decoration: InputDecoration(labelText: 'Thumbnail URL'),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            ElevatedButton(
+              child: Text('Batal'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            ElevatedButton(
+              child: Text('Simpan'),
+              onPressed: () {
+                editAlbum(index, titleController.text, urlController.text, thumbnailUrlController.text);
+                Navigator.of(context).pop();
+              },
             ),
           ],
         );
@@ -103,64 +191,62 @@ class _HomePageState extends State<HomePage> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    fetchAlbum();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        title: const Text('Exam JSON & Rest API',
+        title: const Text('Exam JSON and rest API',
         style: TextStyle(
           color: Colors.blue,
           fontWeight: FontWeight.w800,
         ),
         ),
         centerTitle: true,
+        backgroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.add),
+            onPressed: () {
+              showAddDialog(context);
+            },
+            color: Colors.black,
+          ),
+        ],
       ),
-      body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : ListView.builder(
-              itemCount: lastAlbum.length,
-              itemBuilder: (context, index) {
-                final album = lastAlbum[index];
-                return Padding(
-                  padding: const EdgeInsets.all(5),
-                  child: Card(
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: NetworkImage(album.thumbnailUrl),
-                      ),
-                      title: Text('${album.id} ${album.title}'),
-                      subtitle: Text(album.url),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            onPressed: () => showEditDialog(album),
-                            icon: Icon(Icons.edit_note_outlined,
-                            color: Colors.grey,
-                            ),
-                          ),
-                          SizedBox(width: 10),
-                           IconButton(
-                            onPressed: () => deleteAlbum(album.id),
-                            icon: Icon(Icons.delete,
-                            color: Colors.red,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+      body: ListView.builder(
+        itemCount: album.length,
+        itemBuilder: (context, index) {
+          final albumItem = album[index];
+          return Card(
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundImage: NetworkImage(albumItem.thumbnailUrl),
+              ),
+              title: Text('${albumItem.id}. ${albumItem.title}'),
+              subtitle: Text(albumItem.url),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  IconButton(
+                    icon: Icon(Icons.edit_road_outlined),
+                    color: Colors.blue,
+                    onPressed: () {
+                      showEditDialog(context, index);
+                    },
                   ),
-                );
-              },
+                  IconButton(
+                    icon: Icon(Icons.delete),
+                    color: Colors.red,
+                    onPressed: () {
+                      deleteAlbum(index);
+                    },
+                  ),
+                ],
+              ),
             ),
-    );
+          );
+        },
+      ),
+   );
   }
 }
